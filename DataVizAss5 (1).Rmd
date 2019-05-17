@@ -1,0 +1,1120 @@
+---
+title: "DataViz5"
+output: 
+  output: rmarkdown::github_document
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction.
+
+As everyone knows Galway has a serious transportation problem, due to its dependence on the private car. This dependency is heavily influenced by the weak public transport network, limited cycling facilities, large rural hinterland and it is position as the gateway to Connemara. Combining this with a road and street network that is desperately ill-suited to modern transportation. Has created crippling levels of traffic congestion that have directly affected the quality of life and functionality of this beautiful city. To counteract this problem, a fundamental shift is needed in the direction of sustainable travel and a reduction in the dependency on the private car; by creating a city that is more connected and accessible, thus enhancing the quality of life for all. The aim of this report was to not only analyse and visualise real traffic data from the N59 collected by Galway City Council, but to visualize the impact that public transport could have on daily traffic levels. 
+
+
+```{r chunk1, warning=FALSE, message=FALSE,echo =FALSE}
+library(readxl)
+library(tidyr)
+library(tidyverse)
+library(lubridate)
+library(reshape2)
+library(RColorBrewer)
+library(waffle)
+library(scales)
+library(gridExtra)
+library(ggridges)
+library(ggrepel)
+library(treemap)
+library(treemapify)
+
+
+eastbound <- read_excel("//fs2/18234602/Desktop/traffic1.xlsx", sheet = 2)
+#eastbound <- read_excel("C:/Users/eoghans/Downloads/traffic1.xlsx", sheet = 2)
+eastbound <- eastbound[rowSums(is.na(eastbound)) < ncol(eastbound)-2,]
+eastbound <- na.omit(eastbound, cols = c('Site 9- Moycullen Road'))
+value <- length(colnames(eastbound))
+eastbound[, 2:value] <- sapply(eastbound[, 2:value], as.numeric)
+eastbound <- eastbound %>% filter(X__1 < 1000)
+eastbound['Site 9- Moycullen Road'] <- seq(ymd_hm('2016-11-18 00:00'),ymd_hm('2016-11-24 23:45'), by = '15 mins')
+column_names <- c('Time',	'Total',	'Vbin0:5',	'Vbin5:10'  ,'Vbin10:15',	'Vbin15:20',	'Vbin20:25',	'Vbin25:30',	'Vbin30:35',	'Vbin35:40',	'Vbin40:45'	, 'Vbin45:50',	'Vbin50:55' ,	'Vbin55:60',	'Vbin60:65',	'Vbin65:70'	,'Vbin70:75',	'Vbin75:80',	'Vbin80:85',	'Vbin85:90',	'Vbin90:95'	,'Vbin95:100'	,'Vbin100:105',	'Vbin105:110',	'Vbin110:115',	'Vbin115:120','Vbin120:125',	'Vbin125:140',	'Vbin140:160',	'Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus', 'Mean',	'Vpp',	'Vmax')
+colnames(eastbound) <- column_names
+eastbound<- eastbound %>%
+  mutate(DayOfWeek = wday(Time,label = T),
+         HourOfDay = hour(Time))
+
+westbound <- read_excel("//fs2/18234602/Desktop/traffic1.xlsx", sheet = 3)
+#westbound <- read_excel("C:/Users/eoghans/Downloads/traffic1.xlsx", sheet = 3)
+westbound <- westbound[rowSums(is.na(eastbound)) < ncol(eastbound)-2,]
+westbound <- na.omit(westbound, cols = c('Site 9- Moycullen Road'))
+value <- length(colnames(westbound))
+westbound[, 2:value] <- sapply(westbound[, 2:value], as.numeric)
+westbound <- westbound %>% filter(X__1 < 1000)
+westbound['Site 9- Moycullen Road'] <- seq(ymd_hm('2016-11-18 00:00'),ymd_hm('2016-11-24 23:45'), by = '15 mins')
+colnames(westbound) <- column_names
+westbound <- westbound %>%
+  mutate(DayOfWeek = wday(Time,label = T),
+         HourOfDay = hour(Time))
+
+
+traffic_turn <- read_excel("//fs2/18234602/Desktop/TurningTraffic.xlsx", sheet = 1) %>%
+  mutate(HourOfDay = hour(Time))
+
+#traffic_turn <- read_excel("C:/Users/eoghans/Downloads/TurningTraffic.xlsx", sheet = 1) %>%
+   #mutate(HourOfDay = hour(Time))
+
+```
+
+## Results.
+
+The first plots describe the daily and weekly vehicle distributions of the eastbound and westbound traffic on the N59. To reduce the visual complexity of each graph a number of vehicle classes were merged together to create five classes, cars, vans, two wheeled, bus and heavy goods vehicle. The daily distributions were represented as a tilted bar chart whereas a pie chart was used for the weekly distributions. This dataset is slightly misleading as it suggests that there is a greater number of vans then cars on the road this is more than likely due to an error in data collection as some vans will have same axle with as a car, or a small HGV, so may be misclassified. Similarly the total number of cyclists may be under represented as some cyclists may not be detected if they cross the sensor at the same time as a vehicle or they simply are using the pavement. Despite this ratio of  buses and less intrusive means of transport are significantly low.
+
+```{r chunk2, message=FALSE, warning=FALSE, fig.width = 12, fig.height = 8,echo =FALSE}
+traffic <- eastbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus)
+trafficMon <- traffic %>% filter(DayOfWeek == "Mon") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficTue <- traffic %>% filter(DayOfWeek == "Tue") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficWed <- traffic %>% filter(DayOfWeek == "Wed") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficThur <- traffic %>% filter(DayOfWeek == "Thu") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficFri <- traffic %>% filter(DayOfWeek == "Fri") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficSat <- traffic %>% filter(DayOfWeek == "Sat") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficSun <- traffic %>% filter(DayOfWeek == "Sun") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+
+total <- rbind(trafficMon, trafficTue,trafficWed,trafficThur,trafficFri,trafficSat,trafficSun)
+total['Day'] <- c('Mon','Tue','Wed','Thu','Fri','Sat','Sun')
+total['HGV'] <- total['Rigid2Axle']+total['Rigid3Axle']+total['Rigid4Axle']+total['AxleHGv3']+total['AxleHGV4'] +total['AxleHGV5']
+total[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+total['MotorBikes&Cyclist'] <- total['Cyclist']+total['MotorCycle']
+total[,c('Cyclist','MotorCycle')]<- list(NULL)
+
+
+
+trafficwest <- westbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus)
+trafficwestMon <- trafficwest %>% filter(DayOfWeek == "Mon") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestTue <- trafficwest %>% filter(DayOfWeek == "Tue") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestWed <- trafficwest %>% filter(DayOfWeek == "Wed") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestThur <- trafficwest %>% filter(DayOfWeek == "Thu") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestFri <- trafficwest %>% filter(DayOfWeek == "Fri") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestSat <- trafficwest %>% filter(DayOfWeek == "Sat") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestSun <- trafficwest %>% filter(DayOfWeek == "Sun") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+
+totalwest <- rbind(trafficwestMon, trafficwestTue,trafficwestWed,trafficwestThur,trafficwestFri,trafficwestSat,trafficwestSun)
+totalwest['Day'] <- c('Mon','Tue','Wed','Thu','Fri','Sat','Sun')
+totalwest['HGV'] <- totalwest['Rigid2Axle']+totalwest['Rigid3Axle']+totalwest['Rigid4Axle']+totalwest['AxleHGv3']+totalwest['AxleHGV4'] +totalwest['AxleHGV5']
+totalwest[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+totalwest['MotorBikes&Cyclist'] <- totalwest['Cyclist']+totalwest['MotorCycle']
+totalwest[,c('Cyclist','MotorCycle')]<- list(NULL)
+
+west.melty <- melt(totalwest,id.vars = "Day")
+gwest <- ggplot(west.melty , aes(x = Day, y = value,fill=variable)) +
+  scale_fill_brewer(palette="Dark2")+
+  xlab("Day of Week") +
+  ylab("Vechile Count") +
+  coord_flip() +
+  ggtitle("Fig 3: Distributions of vehicles WestBound") +
+  geom_bar(stat='identity',width = 0.5, position = position_dodge(width=0.5))+
+  theme_bw()
+
+data <-  total %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+dat1 <- data/rowSums(data)*100
+data <- dat1 %>% gather(vechicle,percent,1:5)
+data$vechicle<- factor(data$vechicle, levels = rev(as.character(data$vechicle)))
+
+my_labels <- tibble(x.breaks = seq(1, 1, length.out = 5),
+                    y.breaks = cumsum(data$percent) - data$percent/2,
+                    labels = paste0(round(data$percent,2), "%"),Descripcion = data$vechicle)
+
+pie = ggplot(data, aes(x="", y=percent, fill=vechicle)) + geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values=c("#66A61E", "#E7298A", "#7570B3", "#D95F02", "#1B9E77")) +
+  #scale_fill_brewer(palette="Dark2") +
+  labs(x = NULL, y = NULL, fill = NULL, title = " Fig 6: Total Eastbound Vehcile Distribution")+
+  theme_classic() + 
+  geom_label_repel(data = my_labels, aes(x = x.breaks, y = y.breaks, 
+                                        label = labels, fill = Descripcion),
+                   label.padding = unit(0.1, "lines"),
+                   size = 4,
+                   show.legend = FALSE,
+                   inherit.aes = FALSE)+
+  theme(axis.line = element_blank(),
+                                    axis.text = element_blank(),
+                                    axis.ticks = element_blank(),
+                                    plot.title = element_text(hjust = 0.5, color = "#666666"))
+
+data2 <-  totalwest%>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+dat12 <- data2/rowSums(data2)*100
+
+
+data2 <- dat12 %>% gather(vechicle,percent,1:5)
+data2$vechicle<- factor(data2$vechicle, levels = rev(as.character(data2$vechicle)))
+
+my_labels2 <- tibble(x.breaks = seq(1, 1, length.out = 5),
+                    y.breaks = cumsum(data2$percent) - data2$percent/2,
+                    labels = paste0(round(data2$percent,2), "%"),Descripcion = data2$vechicle)
+
+
+
+pie2 = ggplot(data2, aes(x="", y=percent, fill=vechicle)) + geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values=c("#66A61E", "#E7298A", "#7570B3", "#D95F02", "#1B9E77")) +
+  labs(x = NULL, y = NULL, fill = NULL, title = "Fig 4: Total Westbound Vehcile Distribution")+
+  theme_classic() + 
+  geom_label_repel(data = my_labels2, aes(x = x.breaks, y = y.breaks, 
+                                        label = labels, fill = Descripcion),
+                   label.padding = unit(0.1, "lines"),
+                   size = 4,
+                   show.legend = FALSE,
+                   inherit.aes = FALSE)+
+  theme(axis.line = element_blank(),
+                                    axis.text = element_blank(),
+                                    axis.ticks = element_blank(),
+                                    plot.title = element_text(hjust = 0.5, color = "#666666"))
+
+
+east.melty <- melt(total,id.vars = "Day")
+geast <- ggplot(east.melty , aes(x = Day, y = value ,fill=variable)) +
+  scale_fill_brewer(palette="Dark2")+
+  coord_flip() +
+  xlab("Day of Week") +
+  ylab("Vechile Count") + 
+  ggtitle("Fig 5: Distributions of vehicles EastBound") +
+  geom_bar(stat='identity',width = 0.5, position = position_dodge(width=0.5))+
+  theme_bw()
+
+grid.arrange(gwest,pie2, ncol=2)
+grid.arrange(geast,pie, ncol=2)
+
+```
+
+The second plot visualises both dimensions of traffic, density and speed on an hourly scale. The velocity for each point was calculated as the average velocity across the week for a particular hour of the day. Whereas the size of a point was indicated by the average density of the traffic at that particular hour of the day. The density was calculated using the Passenger Car Unit scale which measures the impact that a mode of transport has on traffic variables (speed, density) in comparison to a single standard passenger car. Wednesday had abnormally high velocity values which diluted and complicated the visualization therefore this was added as a custom annotation in the upper right corner of the plot. From the visualisation lower speeds and larger point size indicate the presence of traffic congestion, it can be clearly seen that all of the weekdays have congestion around 8am and 5pm whereas the on the weekends the traffic levels are more stable throughout the day.
+
+```{r chunk3,echo =FALSE}
+traffic2 <- eastbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus, Mean, HourOfDay)
+traffic2['PCU'] <- traffic2[2]*0.1+traffic2[3]*0.4+traffic2[4]+traffic2[5]+traffic2[6]*1.5+traffic2[7]*1.5+traffic2[8]*2.3+traffic2[9]*3+traffic2[10]*3+traffic2[11]*3+traffic2[12]*2
+traffic2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+traffic4 <- traffic2 %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek != 'Wed')
+traffic3 <- traffic2 %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek == 'Wed')
+
+y <- ggplot(traffic3, aes(x=HourOfDay, y=Mean, size=PCU)) + 
+  geom_point(na.rm = TRUE,alpha=0.2, color='#000000') +
+  scale_color_brewer(palette='Dark2') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        legend.position = "none"
+  ) 
+
+x <- ggplot(traffic4, aes(x=HourOfDay, y=Mean, size=PCU, color=DayOfWeek)) + 
+  geom_point(na.rm = TRUE, alpha=0.3) +
+  scale_color_brewer(palette='Dark2') +
+  xlab("Hour of Day") +
+  ylab("Average Speed") + 
+  ggtitle("Fig 7: Average Speed and Traffic density as a function of Hour of Day") +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5)
+
+  ) 
+
+
+trafficwest<- westbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus, Mean, HourOfDay)
+trafficwest['PCU'] <- trafficwest[2]*0.1+trafficwest[3]*0.4+trafficwest[4]+trafficwest[5]+trafficwest[6]*1.5+trafficwest[7]*1.5+trafficwest[8]*2.3+trafficwest[9]*3+trafficwest[10]*3+trafficwest[11]*3+trafficwest[12]*2
+trafficwest[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+trafficwest4 <- trafficwest %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek != 'Wed')
+trafficwest3 <- trafficwest %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek == 'Wed')
+
+westy <- ggplot(trafficwest3, aes(x=HourOfDay, y=Mean, size=PCU)) + 
+  geom_point(na.rm = TRUE, alpha=0.2, color='#000000') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        legend.position = "none"
+  ) 
+
+westx <- ggplot(trafficwest4, aes(x=HourOfDay, y=Mean, size=PCU, color=DayOfWeek)) + 
+  geom_point(na.rm = TRUE, alpha=0.3) +
+  scale_color_brewer(palette='Dark2') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Speed") + 
+  ggtitle("Fig 8: Average Speed and Traffic density as a function of Hour of Day") +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5)
+
+  ) 
+
+
+x + annotation_custom(ggplotGrob(y), xmin=10, xmax=24,ymin=57, ymax=65)
+westx + annotation_custom(ggplotGrob(westy), xmin=10, xmax=24,ymin=57, ymax=65)
+
+```
+
+The third plot seeks to investigate the vehicle density of the N59 on an hourly scale. The hourly count for each vehicle over the week is grouped by the hour and the average value taken. The same 5 classes used previously are again implemented. As the average density of both cars and vans are much larger than the other classes they were given their own plot. From both the graphs you can see the spikes at 8am and 5pm both the car and van classes as these are personal vehicles. Whereas the buses, bicycles and HGV have a more balanced distribution throughout the day. It is clear that there are a much larger amount of commuter travelling eastbound than westbound on the N59.
+```{r chunk6,fig.width = 12, fig.height = 8,echo =FALSE}
+total2<- eastbound %>% select(HourOfDay,Cyclist,MotorCycle,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+
+total2['HGV'] <- total2['Rigid2Axle']+total2['Rigid3Axle']+total2['Rigid4Axle']+total2['AxleHGv3']+total2['AxleHGV4'] +total2['AxleHGV5']
+total2[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+
+plot1 <- ggplot(data=melt(total2,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 9: Distributions of vehicles Eastbound") +
+  theme_bw()
+
+total3<- eastbound %>% select(HourOfDay,Car,Van) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE)
+
+plot2 <- ggplot(data=melt(total3,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2) + 
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Vehicle Count") + 
+  ggtitle("Fig 10: Distributions of vehicles EastBound") +
+  theme_bw()
+
+
+total22<- westbound %>% select(HourOfDay,Cyclist,MotorCycle,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+
+total22['HGV'] <- total22['Rigid2Axle']+total22['Rigid3Axle']+total22['Rigid4Axle']+total22['AxleHGv3']+total22['AxleHGV4'] +total22['AxleHGV5']
+total22[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+
+plot12 <- ggplot(data=melt(total22,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 11: Distributions of vehicles WestBound") +
+  theme_bw()
+
+total32<- westbound %>% select(HourOfDay,Car,Van) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE)
+
+plot22 <- ggplot(data=melt(total32,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2) + 
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Vehicle Count") + 
+  ggtitle("Fig 12: Distributions of vehicles WestBound") +
+  theme_bw()
+
+
+
+grid.arrange(plot1, plot2, ncol=2)
+grid.arrange(plot12, plot22, ncol=2)
+```
+This visualisation is an interactive graph that highlights the position of the intersection under study. Each turn on the junction is labelled from A to D. A more complex visualization was attempted by using a colour gradient the turn of each road to indicate the severity of the traffic such as google maps. However without the ability to animate the visualization it was complex and non informative, instead the following plots were generated.
+
+```{r chunk4, warning=FALSE, message=FALSE, echo =FALSE}
+library(leaflet)
+
+leaflet() %>% addTiles() %>% 
+  addPopups(-9.074578, 53.289559,  '<h2>B</h2>') %>% 
+  addPopups(-9.073639, 53.289719,  '<h2>A</h2>') %>% 
+  addPopups(-9.073113, 53.289126,   '<h2>C</h2>') %>% 
+  addPopups(-9.074257, 53.289001, '<h2>D</h2>')
+```
+
+In order to contrast and compare both distributions the vehicle density on an hourly and daily scale were investigated again. The plot below is the average hourly count for each vehicle over the day including every turn. This dataset contained a different variety of classes that made it harder to simply divide into 5 classes like the previous plots, therefore all 10 sub classes of vehicles were plotted. Again due to the difference between values the van and car classes were separated from the rest.
+
+```{r chunk15,fig.width = 12, fig.height = 8, echo =FALSE}
+
+piechart <- traffic_turn %>% select(PCL,MCL,TAXI,OGV1,OGV2,CDB,BEB,OB,HourOfDay) %>% group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) %>% gather(vehicle,Count,2:9)
+
+g1 <- ggplot(piechart, aes(x = HourOfDay, y = Count, color = vehicle)) +
+  geom_line(size =2, alpha = 0.3) +
+  scale_color_brewer(palette = 'Dark2')+
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  xlab("Hour of Day") +
+  ylab("Toatl Vehicle Count") + 
+  ggtitle("Fig 13: Total hourly vehicle count for each day") +
+  theme_bw()
+
+piechart2 <- traffic_turn %>% select(CAR,LGV, HourOfDay) %>% group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) %>% gather(vehicle,Count, CAR:LGV)
+
+g2 <- ggplot(piechart2, aes(x = HourOfDay, y = Count, color = vehicle)) +
+  geom_line(size =2, alpha = 0.3) +
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  scale_color_brewer(palette = 'Set2')+
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 13: Total hourly Vehicle count for each day") +
+  theme_bw()
+
+
+grid.arrange(g1,g2, ncol=2)
+
+```
+
+A treemap was used to represent the daily average of the 10 classes on the same plot in an elegant fashion. The area of a tile represents the average count for a vehicle for that particular day. Despite the distribution being similar to the entire N59, the only visible difference is the dramatic increase in the number of cyclists. More than likely due to the insight centre which is an educational institution which would therefore have different ethos than an average company.
+
+```{r chunk16, echo =FALSE}
+piechart3 <- traffic_turn %>% select(PCL,MCL,TAXI,CAR,LGV, OGV1,OGV2,CDB,BEB,OB) %>%   summarize_if(is.numeric, sum, na.rm=TRUE) %>% gather(vehicle,Count,1:10)
+
+ggplot(piechart3, aes(area = Count, fill = vehicle, label = vehicle)) +
+  geom_treemap()+
+  geom_treemap_text(colour = "Black", place = "centre",
+                    grow = FALSE)+
+  xlab("") +
+  ylab("") + 
+  ggtitle("Fig 14: Tree Map of the Total Vehicle distribution") +
+  theme_bw()
+
+
+
+```
+
+The next visualisation shows the total PCU value for each turn on the  junction ie. turn from Road A onto Road B. The hourly PCU value of each turn were represented using a simple barchart that was faceted on the original road from which the vehicle came from. It is clearly visible that road B is the busiest as it has the highest hourly density when compared of any other turn. This is logical as road B signifies the start of the N59. The second busiest turn is turn C which is simply a continuation of the N59 as it follows the same direction and is the direct link from the N59 to the city centre. Finally turn A has the lowest amount of traffic as this essentially a private road which leads to the Dangan IDA business park. The distribution of the hourly PCU values does not have the same peaks seen before.Although Road B has a large spike at 8am and the other three roads all spike at 5pm.
+This indicates that the road users are commuting from the east using the N59 to travel to work. And then at 5pm they have to use the junction to travel home this seems to be where the traffic stems from as in the morning the road is large and everyone's true destinations are scattered so the traffic is only on the N59, however at 5 they all must use the same junction to return to the N59 therefore the traffic is spread over the other 3 roads.
+
+
+```{r chunk5, warning=FALSE, message=FALSE, echo =FALSE}
+colourCount = length(unique(traffic_turn$Class))
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+
+traffic_turn %>% select(Class,PCU,HourOfDay) %>% group_by(Class,HourOfDay) %>%
+  summarise(PCU = sum(PCU)) %>% mutate(Turn = substring(Class,1,1)) %>%
+  ggplot(aes(x=HourOfDay,y=PCU, fill = Class)) +
+  geom_bar(stat = "identity", position = 'dodge') +
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  xlab("Hour of Day") +
+  ylab("Total PCU") + 
+  ggtitle("Fig 15: Junction Traffic Density") +
+  scale_fill_manual(values = getPalette(colourCount))+
+  facet_wrap(~Turn,nrow =2)+
+  theme_bw()
+
+```
+
+A diverging bar chart was created to highlight the hours in which traffic was most prevalent on the N59 throughout the day.The total PCU value for each hour was calculated for each day and the mean PCU value for the entire week was then subtracted from each value to create the diverginging bar chart. The results are as expected , the traffic is mainly confined to a specific time period mainly from 6am to 7pm. Within this timeframe there are spikes at 8am and 5pm on weekdays. In contrast the weekends have later starts approximately 10am and have a more balanced distribution in general. There is also a difference between the east and westbound traffic despite the two sharing a similar distribution the westbound road has a higher PCU values in the morning and lower PCU values in the afternoon and evening in comparison with the eastbound traffic.
+
+
+```{r chunk7,fig.width = 12, fig.height = 8, warning=FALSE, message=FALSE, echo =FALSE}
+
+NoBuses <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+NoBuses['PCU'] <- NoBuses[3]*0.1+NoBuses[4]*0.4+NoBuses[5]+NoBuses[6]+NoBuses[7]*1.5+NoBuses[8]*1.5+NoBuses[9]*2.3+NoBuses[10]*3+NoBuses[11]*3+NoBuses[12]*3+NoBuses[13]*2
+NoBuses[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBuses['indicator'] <- 'EastBound'
+
+NoBuseswest <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+NoBuseswest['PCU'] <- NoBuseswest[3]*0.1+NoBuseswest[4]*0.4+NoBuseswest[5]+NoBuseswest [6]+NoBuseswest[7]*1.5+NoBuseswest[8]*1.5+NoBuseswest[9]*2.3+NoBuseswest[10]*3+NoBuseswest [11]*3+NoBuseswest[12]*3+NoBuseswest[13]*2
+NoBuseswest[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBuseswest['indicator'] <- 'WestBound'
+
+
+rbind(NoBuses,NoBuseswest) %>% mutate(PCU = PCU - mean(PCU)) %>% ggplot(aes(x = HourOfDay,y= PCU,fill = DayOfWeek))+
+  geom_bar(stat = "identity", position = 'dodge')+
+  scale_fill_brewer(palette = 'Dark2')+
+  facet_wrap(~indicator, ncol = 1)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour Of Day") +
+  ylab("Total Vehice Count") + 
+  ggtitle("Fig 16: Hourly Vehicle distribution") +
+  theme_bw()
+
+```
+
+The final set of graphs visually represent the impact that public transport can have on the traffic density of Galway. Both graphs use a simple area graph to compare the difference between the original distribution and the amended solution's average PCU values. Figure 17 explores the effect a regular bus service from Moycullen to the IDA park would have on the traffic density. From research online a standard city bus at maximum capacity can take 40 cars off the road at a single time. Therefore assuming the buses are approximately half full each bus will remove 20 cars from the N59. A service every half hour is proposed from 7am to 8pm with two more services provided one every 15 mins or 4 every hour should be scheduled from 7am-9am and from 4pm-6pm at the peak commuting times. From the graph below there is a clear reduction in traffic density with the hourly distribution almost remaining constant.
+```{r chunk9,fig.width = 12, fig.height = 8, echo =FALSE}
+
+NoBusesArea <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea['PCU'] <- NoBusesArea[3]*0.1+NoBusesArea[4]*0.4+NoBusesArea[5]+NoBusesArea [6]+NoBusesArea[7]*1.5+NoBusesArea[8]*1.5+NoBusesArea[9]*2.3+NoBusesArea[10]*3+NoBusesArea [11]*3+NoBusesArea [12]*3+NoBusesArea[13]*2
+NoBusesArea[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea['indicator'] <- 'Standard_Bus_Timetable'
+NoBusesArea['EastorWest'] <- 'Eastbound' 
+
+moreBuses <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-80,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses['PCU'] <- moreBuses[3]*0.1+moreBuses[4]*0.4+moreBuses[5]+moreBuses[6]+moreBuses[7]*1.5+moreBuses[8]*1.5+moreBuses[9]*2.3+moreBuses[10]*3+moreBuses[11]*3+moreBuses[12]*3+moreBuses[13]*2
+moreBuses[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses['indicator'] <- 'Extra_Buses'
+moreBuses['EastorWest'] <- 'Eastbound' 
+
+
+
+NoBusesArea2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea2['PCU'] <- NoBusesArea2[3]*0.1+NoBusesArea2[4]*0.4+NoBusesArea2[5]+NoBusesArea2[6]+NoBusesArea2[7]*1.5+NoBusesArea2[8]*1.5+NoBusesArea2[9]*2.3+NoBusesArea2[10]*3+NoBusesArea2[11]*3+NoBusesArea2 [12]*3+NoBusesArea2[13]*2
+NoBusesArea2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea2['indicator'] <- 'Standard_Bus_Timetable'
+NoBusesArea2['EastorWest'] <- 'Westbound' 
+
+moreBuses2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-70,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses2['PCU'] <- moreBuses2[3]*0.1+moreBuses2[4]*0.4+moreBuses2[5]+moreBuses2[6]+moreBuses2[7]*1.5+moreBuses2[8]*1.5+moreBuses2[9]*2.3+moreBuses2[10]*3+moreBuses2[11]*3+moreBuses2[12]*3+moreBuses2[13]*2
+moreBuses2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses2['indicator'] <- 'Extra_Buses'
+moreBuses2['EastorWest'] <- 'Westbound' 
+
+
+
+rbind(moreBuses,NoBusesArea, moreBuses2,NoBusesArea2) %>%  ggplot()+
+  geom_ridgeline(aes(x = HourOfDay, y = indicator, height = PCU, fill = indicator),stat = "identity",alpha = 0.5)+
+  #geom_bar(aes(x = HourOfDay , y = PCU, fill = indicator), stat = "identity",alpha = 0.2)+
+  scale_fill_brewer(palette = 'Dark2')+
+  labs(title = "Fig 17: Effect of additional Buses on the N59 Hourly Traffic", x ='Hour of Day')+
+  scale_x_continuous(lim=c(7,20), breaks=seq(7,20,1)) +
+  facet_wrap(~EastorWest,ncol = 1)+ 
+  theme_bw()+
+  theme (panel.grid.major.y =element_line(colour = "gray95", size =0.1),
+panel.grid.major.x =element_line(colour = "gray95", size =0.1),
+axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+```
+
+The final graph from this report details the effect a cycle path from Moycullen to Galway city via the IDA Business Park and the University would have on traffic density. From research online it was suggested that a cycle lane would increase the number of cyclists by 100%. Therefore the hourly average number of cyclists was multiplied by 100% and the difference was subtracted from the car total as it was assumed that these new cyclists previous mode of transport was the car. Again the average PCU values were calculated and plotted. It is aparent that the bicycle also decreases the average traffic density however not as much as the bus example above.However a cycle lane is an inexpensive fix compared to a new bus service.
+
+```{r chunk17,fig.width = 12, fig.height = 8, echo =FALSE}
+moreBikesss <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(NewCyclist = Cyclist*100) %>% mutate(diffCyclist = round(NewCyclist-Cyclist)) %>%
+  mutate(Car = Car-diffCyclist)
+moreBikesss[c('Cyclist','diffCyclist')] <- list(NULL)
+moreBikesss['PCU'] <- moreBikesss[13]*0.1+moreBikesss[4]*0.4+moreBikesss[5]+moreBikesss[6]+moreBikesss[7]*1.5+moreBikesss[8]*1.5+moreBikesss[9]*2.3+moreBikesss[10]*3+moreBikesss[11]*3+moreBikesss[12]*3
+moreBikesss[,c('NewCyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBikesss['indicator'] <- 'Extra_Bikes'
+moreBikesss['EastorWest'] <- 'Eastbound' 
+
+moreBikes2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(NewCyclist = Cyclist*100) %>% mutate(diffCyclist = round(NewCyclist-Cyclist)) %>%
+  mutate(Car = Car-diffCyclist)
+moreBikes2[c('Cyclist','diffCyclist')] <- list(NULL)
+moreBikes2['PCU'] <- moreBikes2[13]*0.1+moreBikes2[4]*0.4+moreBikes2[5]+moreBikes2[6]+moreBikes2[7]*1.5+moreBikes2[8]*1.5+moreBikes2[9]*2.3+moreBikes2[10]*3+moreBikes2[11]*3+moreBikes2[12]*3
+moreBikes2[,c('NewCyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBikes2['indicator'] <- 'Extra_Bikes'
+moreBikes2['EastorWest'] <- 'Westbound' 
+
+
+
+rbind(moreBikesss,NoBusesArea,moreBikes2) %>%  ggplot()+
+  geom_ridgeline(aes(x = HourOfDay, y = indicator, height = PCU, fill = indicator),stat = "identity",alpha = 0.5)+
+  scale_fill_brewer(palette = 'Dark2')+
+  labs(title = "Fig 18: Effect of a Greenway on the N59 Hourly Traffic", x ='Hour of Day')+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  facet_wrap(~EastorWest,ncol = 1)+ 
+  theme_bw()+
+  theme (
+panel.grid.major.y =element_line(colour = "gray95", size =0.1),
+panel.grid.major.x =element_line(colour = "gray95", size =0.1),
+axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+```
+
+
+## Conclusion.
+
+Rising traffic congestion is an inescapable condition in growing metropolitan areas across Ireland. Peak-hour traffic congestion is an inherent result of the way modern societies operate. As the efficient operation of both the economy and school systems requires that people work, go to school, and even run errands during the same hours so they can interact with each other, inevitably overloading the existing road and transit systems. Two relatively low cost solutions (in comparison to the proposed 600 million city bypass) were explored within this report both of which had a positive impact on traffic density. Despite the regular bus service achieving lower density values. I believe no single solution is necessarily better than the other, due to the complexities of each solution and limited data. However, in my opinion sustainable transport should be promoted and encouraged in Ireland especially with or carbon emissions 2020 target looming. In the long run the Irish government should learn from these shortcomings especially with the resurgence in the construction industry. Leaving the development of new homes to the private market, while the taxpayers are left to take care of funding the public transport services needed to service them is not progressive!. We should instead look towards are friends in Europe were high density developments are created and serviced by light rail, buses and cycle lanes. 
+
+
+## Appendices. 
+
+
+```{r lastChunk,warning=FALSE,message=FALSE, eval = FALSE}
+
+#####--------------------------------Preprocessing---------------------------------#####
+
+library(readxl)
+library(tidyr)
+library(tidyverse)
+library(lubridate)
+library(reshape2)
+library(RColorBrewer)
+library(waffle)
+library(scales)
+library(gridExtra)
+library(ggridges)
+library(ggrepel)
+library(treemap)
+library(treemapify)
+
+
+eastbound <- read_excel("//fs2/18234602/Desktop/traffic1.xlsx", sheet = 2)
+eastbound <- eastbound[rowSums(is.na(eastbound)) < ncol(eastbound)-2,]
+eastbound <- na.omit(eastbound, cols = c('Site 9- Moycullen Road'))
+value <- length(colnames(eastbound))
+eastbound[, 2:value] <- sapply(eastbound[, 2:value], as.numeric)
+eastbound <- eastbound %>% filter(X__1 < 1000)
+eastbound['Site 9- Moycullen Road'] <- seq(ymd_hm('2016-11-18 00:00'),ymd_hm('2016-11-24 23:45'), by = '15 mins')
+column_names <- c('Time',	'Total',	'Vbin0:5',	'Vbin5:10'  ,'Vbin10:15',	'Vbin15:20',	'Vbin20:25',	'Vbin25:30',	'Vbin30:35',	'Vbin35:40',	'Vbin40:45'	, 'Vbin45:50',	'Vbin50:55' ,	'Vbin55:60',	'Vbin60:65',	'Vbin65:70'	,'Vbin70:75',	'Vbin75:80',	'Vbin80:85',	'Vbin85:90',	'Vbin90:95'	,'Vbin95:100'	,'Vbin100:105',	'Vbin105:110',	'Vbin110:115',	'Vbin115:120','Vbin120:125',	'Vbin125:140',	'Vbin140:160',	'Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus', 'Mean',	'Vpp',	'Vmax')
+colnames(eastbound) <- column_names
+eastbound<- eastbound %>%
+  mutate(DayOfWeek = wday(Time,label = T),
+         HourOfDay = hour(Time))
+
+westbound <- read_excel("//fs2/18234602/Desktop/traffic1.xlsx", sheet = 3)
+westbound <- westbound[rowSums(is.na(eastbound)) < ncol(eastbound)-2,]
+westbound <- na.omit(westbound, cols = c('Site 9- Moycullen Road'))
+value <- length(colnames(westbound))
+westbound[, 2:value] <- sapply(westbound[, 2:value], as.numeric)
+westbound <- westbound %>% filter(X__1 < 1000)
+westbound['Site 9- Moycullen Road'] <- seq(ymd_hm('2016-11-18 00:00'),ymd_hm('2016-11-24 23:45'), by = '15 mins')
+colnames(westbound) <- column_names
+westbound <- westbound %>%
+  mutate(DayOfWeek = wday(Time,label = T),
+         HourOfDay = hour(Time))
+
+
+traffic_turn <- read_excel("//fs2/18234602/Desktop/TurningTraffic.xlsx", sheet = 1) %>%
+  mutate(HourOfDay = hour(Time))
+
+######---------------------------plot1------------------------------#####
+
+traffic <- eastbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus)
+trafficMon <- traffic %>% filter(DayOfWeek == "Mon") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficTue <- traffic %>% filter(DayOfWeek == "Tue") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficWed <- traffic %>% filter(DayOfWeek == "Wed") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficThur <- traffic %>% filter(DayOfWeek == "Thu") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficFri <- traffic %>% filter(DayOfWeek == "Fri") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficSat <- traffic %>% filter(DayOfWeek == "Sat") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficSun <- traffic %>% filter(DayOfWeek == "Sun") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+
+total <- rbind(trafficMon, trafficTue,trafficWed,trafficThur,trafficFri,trafficSat,trafficSun)
+total['Day'] <- c('Mon','Tue','Wed','Thu','Fri','Sat','Sun')
+total['HGV'] <- total['Rigid2Axle']+total['Rigid3Axle']+total['Rigid4Axle']+total['AxleHGv3']+total['AxleHGV4'] +total['AxleHGV5']
+total[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+total['MotorBikes&Cyclist'] <- total['Cyclist']+total['MotorCycle']
+total[,c('Cyclist','MotorCycle')]<- list(NULL)
+
+
+
+trafficwest <- westbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus)
+trafficwestMon <- trafficwest %>% filter(DayOfWeek == "Mon") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestTue <- trafficwest %>% filter(DayOfWeek == "Tue") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestWed <- trafficwest %>% filter(DayOfWeek == "Wed") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestThur <- trafficwest %>% filter(DayOfWeek == "Thu") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestFri <- trafficwest %>% filter(DayOfWeek == "Fri") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestSat <- trafficwest %>% filter(DayOfWeek == "Sat") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+trafficwestSun <- trafficwest %>% filter(DayOfWeek == "Sun") %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+
+totalwest <- rbind(trafficwestMon, trafficwestTue,trafficwestWed,trafficwestThur,trafficwestFri,trafficwestSat,trafficwestSun)
+totalwest['Day'] <- c('Mon','Tue','Wed','Thu','Fri','Sat','Sun')
+totalwest['HGV'] <- totalwest['Rigid2Axle']+totalwest['Rigid3Axle']+totalwest['Rigid4Axle']+totalwest['AxleHGv3']+totalwest['AxleHGV4'] +totalwest['AxleHGV5']
+totalwest[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+totalwest['MotorBikes&Cyclist'] <- totalwest['Cyclist']+totalwest['MotorCycle']
+totalwest[,c('Cyclist','MotorCycle')]<- list(NULL)
+
+west.melty <- melt(totalwest,id.vars = "Day")
+gwest <- ggplot(west.melty , aes(x = Day, y = value,fill=variable)) +
+  scale_fill_brewer(palette="Dark2")+
+  xlab("Day of Week") +
+  ylab("Vechile Count") +
+  coord_flip() +
+  ggtitle("Fig 3: Distributions of vehicles WestBound") +
+  geom_bar(stat='identity',width = 0.5, position = position_dodge(width=0.5))+
+  theme_bw()
+
+data <-  total %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+dat1 <- data/rowSums(data)*100
+data <- dat1 %>% gather(vechicle,percent,1:5)
+data$vechicle<- factor(data$vechicle, levels = rev(as.character(data$vechicle)))
+
+my_labels <- tibble(x.breaks = seq(1, 1, length.out = 5),
+                    y.breaks = cumsum(data$percent) - data$percent/2,
+                    labels = paste0(round(data$percent,2), "%"),Descripcion = data$vechicle)
+
+pie = ggplot(data, aes(x="", y=percent, fill=vechicle)) + geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values=c("#66A61E", "#E7298A", "#7570B3", "#D95F02", "#1B9E77")) +
+  #scale_fill_brewer(palette="Dark2") +
+  labs(x = NULL, y = NULL, fill = NULL, title = " Fig 6: Total Eastbound Vehcile Distribution")+
+  theme_classic() + 
+  geom_label_repel(data = my_labels, aes(x = x.breaks, y = y.breaks, 
+                                        label = labels, fill = Descripcion),
+                   label.padding = unit(0.1, "lines"),
+                   size = 4,
+                   show.legend = FALSE,
+                   inherit.aes = FALSE)+
+  theme(axis.line = element_blank(),
+                                    axis.text = element_blank(),
+                                    axis.ticks = element_blank(),
+                                    plot.title = element_text(hjust = 0.5, color = "#666666"))
+
+data2 <-  totalwest%>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+dat12 <- data2/rowSums(data2)*100
+
+
+data2 <- dat12 %>% gather(vechicle,percent,1:5)
+data2$vechicle<- factor(data2$vechicle, levels = rev(as.character(data2$vechicle)))
+
+my_labels2 <- tibble(x.breaks = seq(1, 1, length.out = 5),
+                    y.breaks = cumsum(data2$percent) - data2$percent/2,
+                    labels = paste0(round(data2$percent,2), "%"),Descripcion = data2$vechicle)
+
+
+
+pie2 = ggplot(data2, aes(x="", y=percent, fill=vechicle)) + geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values=c("#66A61E", "#E7298A", "#7570B3", "#D95F02", "#1B9E77")) +
+  labs(x = NULL, y = NULL, fill = NULL, title = "Fig 4: Total Westbound Vehcile Distribution")+
+  theme_classic() + 
+  geom_label_repel(data = my_labels2, aes(x = x.breaks, y = y.breaks, 
+                                        label = labels, fill = Descripcion),
+                   label.padding = unit(0.1, "lines"),
+                   size = 4,
+                   show.legend = FALSE,
+                   inherit.aes = FALSE)+
+  theme(axis.line = element_blank(),
+                                    axis.text = element_blank(),
+                                    axis.ticks = element_blank(),
+                                    plot.title = element_text(hjust = 0.5, color = "#666666"))
+
+
+east.melty <- melt(total,id.vars = "Day")
+geast <- ggplot(east.melty , aes(x = Day, y = value ,fill=variable)) +
+  scale_fill_brewer(palette="Dark2")+
+  coord_flip() +
+  xlab("Day of Week") +
+  ylab("Vechile Count") + 
+  ggtitle("Fig 5: Distributions of vehicles EastBound") +
+  geom_bar(stat='identity',width = 0.5, position = position_dodge(width=0.5))+
+  theme_bw()
+
+grid.arrange(gwest,pie2, ncol=2)
+grid.arrange(geast,pie, ncol=2)
+
+
+
+######----------------------------plot2---------------------------------#######
+
+traffic2 <- eastbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus, Mean, HourOfDay)
+traffic2['PCU'] <- traffic2[2]*0.1+traffic2[3]*0.4+traffic2[4]+traffic2[5]+traffic2[6]*1.5+traffic2[7]*1.5+traffic2[8]*2.3+traffic2[9]*3+traffic2[10]*3+traffic2[11]*3+traffic2[12]*2
+traffic2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+traffic4 <- traffic2 %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek != 'Wed')
+traffic3 <- traffic2 %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek == 'Wed')
+
+y <- ggplot(traffic3, aes(x=HourOfDay, y=Mean, size=PCU)) + 
+  geom_point(na.rm = TRUE,alpha=0.2, color='#000000') +
+  scale_color_brewer(palette='Dark2') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        legend.position = "none"
+  ) 
+
+x <- ggplot(traffic4, aes(x=HourOfDay, y=Mean, size=PCU, color=DayOfWeek)) + 
+  geom_point(na.rm = TRUE, alpha=0.3) +
+  scale_color_brewer(palette='Dark2') +
+  xlab("Hour of Day") +
+  ylab("Average Speed") + 
+  ggtitle("Fig 7: Average Speed and Traffic density as a function of Hour of Day") +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5)
+
+  ) 
+
+
+trafficwest<- westbound %>% select(DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus, Mean, HourOfDay)
+trafficwest['PCU'] <- trafficwest[2]*0.1+trafficwest[3]*0.4+trafficwest[4]+trafficwest[5]+trafficwest[6]*1.5+trafficwest[7]*1.5+trafficwest[8]*2.3+trafficwest[9]*3+trafficwest[10]*3+trafficwest[11]*3+trafficwest[12]*2
+trafficwest[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+trafficwest4 <- trafficwest %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek != 'Wed')
+trafficwest3 <- trafficwest %>% group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(mean)) %>% filter(DayOfWeek == 'Wed')
+
+westy <- ggplot(trafficwest3, aes(x=HourOfDay, y=Mean, size=PCU)) + 
+  geom_point(na.rm = TRUE, alpha=0.2, color='#000000') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5),
+        legend.key = element_rect(fill = NA, colour = NA, size = 0.25),
+        legend.position = "none"
+  ) 
+
+westx <- ggplot(trafficwest4, aes(x=HourOfDay, y=Mean, size=PCU, color=DayOfWeek)) + 
+  geom_point(na.rm = TRUE, alpha=0.3) +
+  scale_color_brewer(palette='Dark2') +
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Speed") + 
+  ggtitle("Fig 8: Average Speed and Traffic density as a function of Hour of Day") +
+  theme(panel.grid.major = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black", size = 0.1), 
+        axis.text.x = element_text(angle = 30, hjust=1, vjust = .5, size = 5),
+        axis.text.y = element_text( size = 5)
+
+  ) 
+
+
+x + annotation_custom(ggplotGrob(y), xmin=10, xmax=24,ymin=57, ymax=65)
+westx + annotation_custom(ggplotGrob(westy), xmin=10, xmax=24,ymin=57, ymax=65)
+
+
+
+###############----------------------------plot3----------------------------------#################
+
+
+total2<- eastbound %>% select(HourOfDay,Cyclist,MotorCycle,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+
+total2['HGV'] <- total2['Rigid2Axle']+total2['Rigid3Axle']+total2['Rigid4Axle']+total2['AxleHGv3']+total2['AxleHGV4'] +total2['AxleHGV5']
+total2[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+
+plot1 <- ggplot(data=melt(total2,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 9: Distributions of vehicles Eastbound") +
+  theme_bw()
+
+total3<- eastbound %>% select(HourOfDay,Car,Van) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE)
+
+plot2 <- ggplot(data=melt(total3,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2) + 
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Vehicle Count") + 
+  ggtitle("Fig 10: Distributions of vehicles EastBound") +
+  theme_bw()
+
+
+total22<- westbound %>% select(HourOfDay,Cyclist,MotorCycle,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) 
+
+total22['HGV'] <- total22['Rigid2Axle']+total22['Rigid3Axle']+total22['Rigid4Axle']+total22['AxleHGv3']+total22['AxleHGV4'] +total22['AxleHGV5']
+total22[ ,c('Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5')] <- list(NULL)
+
+plot12 <- ggplot(data=melt(total22,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 11: Distributions of vehicles WestBound") +
+  theme_bw()
+
+total32<- westbound %>% select(HourOfDay,Car,Van) %>%
+  group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE)
+
+plot22 <- ggplot(data=melt(total32,id.vars = 'HourOfDay'), aes(x=HourOfDay,y= value, color = variable))+
+  geom_line(alpha=0.3, size = 2) + 
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour of Day") +
+  ylab("Average Vehicle Count") + 
+  ggtitle("Fig 12: Distributions of vehicles WestBound") +
+  theme_bw()
+
+
+
+grid.arrange(plot1, plot2, ncol=2)
+grid.arrange(plot12, plot22, ncol=2)
+
+
+#################--------------------------------plot5-----------------------------------#############
+
+library(leaflet)
+
+leaflet() %>% addTiles() %>% 
+  addPopups(-9.074578, 53.289559,  '<h2>B</h2>') %>% 
+  addPopups(-9.073639, 53.289719,  '<h2>A</h2>') %>% 
+  addPopups(-9.073113, 53.289126,   '<h2>C</h2>') %>% 
+  addPopups(-9.074257, 53.289001, '<h2>D</h2>')
+
+
+
+#############-------------------------------------plot6---------------------------------############
+
+piechart <- traffic_turn %>% select(PCL,MCL,TAXI,OGV1,OGV2,CDB,BEB,OB,HourOfDay) %>% group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) %>% gather(vehicle,Count,2:9)
+
+g1 <- ggplot(piechart, aes(x = HourOfDay, y = Count, color = vehicle)) +
+  geom_line(size =2, alpha = 0.3) +
+  scale_color_brewer(palette = 'Dark2')+
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  xlab("Hour of Day") +
+  ylab("Toatl Vehicle Count") + 
+  ggtitle("Fig 13: Total hourly vehicle count for each day") +
+  theme_bw()
+
+piechart2 <- traffic_turn %>% select(CAR,LGV, HourOfDay) %>% group_by(HourOfDay) %>% summarize_if(is.numeric, mean, na.rm=TRUE) %>% gather(vehicle,Count, CAR:LGV)
+
+g2 <- ggplot(piechart2, aes(x = HourOfDay, y = Count, color = vehicle)) +
+  geom_line(size =2, alpha = 0.3) +
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  scale_color_brewer(palette = 'Set2')+
+  xlab("Hour of Day") +
+  ylab("Total Vehicle Count") + 
+  ggtitle("Fig 13: Total hourly Vehicle count for each day") +
+  theme_bw()
+
+
+grid.arrange(g1,g2, ncol=2)
+
+#################-----------------------------plot7-----------------------------###################
+
+colourCount = length(unique(traffic_turn$Class))
+getPalette = colorRampPalette(brewer.pal(8, "Dark2"))
+
+traffic_turn %>% select(Class,PCU,HourOfDay) %>% group_by(Class,HourOfDay) %>%
+  summarise(PCU = sum(PCU)) %>% mutate(Turn = substring(Class,1,1)) %>%
+  ggplot(aes(x=HourOfDay,y=PCU, fill = Class)) +
+  geom_bar(stat = "identity", position = 'dodge') +
+  scale_x_continuous(lim=c(7,18), breaks=seq(7,18,1)) +
+  xlab("Hour of Day") +
+  ylab("Total PCU") + 
+  ggtitle("Fig 15: Junction Traffic Density") +
+  scale_fill_manual(values = getPalette(colourCount))+
+  facet_wrap(~Turn,nrow =2)+
+  theme_bw()
+
+
+
+###################-----------------------------plot8----------------------------####################
+piechart3 <- traffic_turn %>% select(PCL,MCL,TAXI,CAR,LGV, OGV1,OGV2,CDB,BEB,OB) %>%   summarize_if(is.numeric, sum, na.rm=TRUE) %>% gather(vehicle,Count,1:10)
+
+ggplot(piechart3, aes(area = Count, fill = vehicle, label = vehicle)) +
+  geom_treemap()+
+  geom_treemap_text(colour = "Black", place = "centre",
+                    grow = FALSE)+
+  xlab("") +
+  ylab("") + 
+  ggtitle("Fig 14: Tree Map of the Total Vehicle distribution") +
+  theme_bw()
+
+###############------------------plot9--------------------#########################
+
+
+NoBuses <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+NoBuses['PCU'] <- NoBuses[3]*0.1+NoBuses[4]*0.4+NoBuses[5]+NoBuses[6]+NoBuses[7]*1.5+NoBuses[8]*1.5+NoBuses[9]*2.3+NoBuses[10]*3+NoBuses[11]*3+NoBuses[12]*3+NoBuses[13]*2
+NoBuses[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBuses['indicator'] <- 'EastBound'
+
+NoBuseswest <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(DayOfWeek,HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) sum(., na.rm = TRUE) else first(.)))
+NoBuseswest['PCU'] <- NoBuseswest[3]*0.1+NoBuseswest[4]*0.4+NoBuseswest[5]+NoBuseswest [6]+NoBuseswest[7]*1.5+NoBuseswest[8]*1.5+NoBuseswest[9]*2.3+NoBuseswest[10]*3+NoBuseswest [11]*3+NoBuseswest[12]*3+NoBuseswest[13]*2
+NoBuseswest[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBuseswest['indicator'] <- 'WestBound'
+
+
+rbind(NoBuses,NoBuseswest) %>% mutate(PCU = PCU - mean(PCU)) %>% ggplot(aes(x = HourOfDay,y= PCU,fill = DayOfWeek))+
+  geom_bar(stat = "identity", position = 'dodge')+
+  scale_fill_brewer(palette = 'Dark2')+
+  facet_wrap(~indicator, ncol = 1)+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  xlab("Hour Of Day") +
+  ylab("Total Vehice Count") + 
+  ggtitle("Fig 16: Hourly Vehicle distribution") +
+  theme_bw()
+
+
+##########-----------------------------plot10----------------------------################
+
+NoBusesArea <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea['PCU'] <- NoBusesArea[3]*0.1+NoBusesArea[4]*0.4+NoBusesArea[5]+NoBusesArea [6]+NoBusesArea[7]*1.5+NoBusesArea[8]*1.5+NoBusesArea[9]*2.3+NoBusesArea[10]*3+NoBusesArea [11]*3+NoBusesArea [12]*3+NoBusesArea[13]*2
+NoBusesArea[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea['indicator'] <- 'Standard_Bus _Timetable'
+NoBusesArea['EastorWest'] <- 'Eastbound' 
+
+moreBuses <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-80,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses['PCU'] <- moreBuses[3]*0.1+moreBuses[4]*0.4+moreBuses[5]+moreBuses[6]+moreBuses[7]*1.5+moreBuses[8]*1.5+moreBuses[9]*2.3+moreBuses[10]*3+moreBuses[11]*3+moreBuses[12]*3+moreBuses[13]*2
+moreBuses[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses['indicator'] <- 'Extra_Buses'
+moreBuses['EastorWest'] <- 'Eastbound' 
+
+
+
+NoBusesArea2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea2['PCU'] <- NoBusesArea2[3]*0.1+NoBusesArea2[4]*0.4+NoBusesArea2[5]+NoBusesArea2[6]+NoBusesArea2[7]*1.5+NoBusesArea2[8]*1.5+NoBusesArea2[9]*2.3+NoBusesArea2[10]*3+NoBusesArea2[11]*3+NoBusesArea2 [12]*3+NoBusesArea2[13]*2
+NoBusesArea2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea2['indicator'] <- 'Standard_Bus _Timetable'
+NoBusesArea2['EastorWest'] <- 'Westbound' 
+
+moreBuses2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-70,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses2['PCU'] <- moreBuses2[3]*0.1+moreBuses2[4]*0.4+moreBuses2[5]+moreBuses2[6]+moreBuses2[7]*1.5+moreBuses2[8]*1.5+moreBuses2[9]*2.3+moreBuses2[10]*3+moreBuses2[11]*3+moreBuses2[12]*3+moreBuses2[13]*2
+moreBuses2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses2['indicator'] <- 'Extra_Buses'
+moreBuses2['EastorWest'] <- 'Westbound' 
+
+
+
+rbind(moreBuses,NoBusesArea, moreBuses2,NoBusesArea2) %>%  ggplot()+
+  geom_ridgeline(aes(x = HourOfDay, y = indicator, height = PCU, fill = indicator),stat = "identity",alpha = 0.5)+
+  #geom_bar(aes(x = HourOfDay , y = PCU, fill = indicator), stat = "identity",alpha = 0.2)+
+  scale_fill_brewer(palette = 'Dark2')+
+  labs(title = "Fig 17: Effect of additional Buses on the N59 Hourly Traffic", x ='Hour of Day')+
+  scale_x_continuous(lim=c(7,20), breaks=seq(7,20,1)) +
+  facet_wrap(~EastorWest,ncol = 1)+ 
+  theme_bw()+
+  theme (panel.grid.major.y =element_line(colour = "gray95", size =0.1),
+panel.grid.major.x =element_line(colour = "gray95", size =0.1),
+axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+
+
+##########----------------------------------plot11--------------------------###############
+
+NoBusesArea <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea['PCU'] <- NoBusesArea[3]*0.1+NoBusesArea[4]*0.4+NoBusesArea[5]+NoBusesArea [6]+NoBusesArea[7]*1.5+NoBusesArea[8]*1.5+NoBusesArea[9]*2.3+NoBusesArea[10]*3+NoBusesArea [11]*3+NoBusesArea [12]*3+NoBusesArea[13]*2
+NoBusesArea[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea['indicator'] <- 'Standard_Bus _Timetable'
+NoBusesArea['EastorWest'] <- 'Eastbound' 
+
+moreBuses <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-80,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses['PCU'] <- moreBuses[3]*0.1+moreBuses[4]*0.4+moreBuses[5]+moreBuses[6]+moreBuses[7]*1.5+moreBuses[8]*1.5+moreBuses[9]*2.3+moreBuses[10]*3+moreBuses[11]*3+moreBuses[12]*3+moreBuses[13]*2
+moreBuses[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses['indicator'] <- 'Extra_Buses'
+moreBuses['EastorWest'] <- 'Eastbound' 
+
+
+
+NoBusesArea2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.)))
+NoBusesArea2['PCU'] <- NoBusesArea2[3]*0.1+NoBusesArea2[4]*0.4+NoBusesArea2[5]+NoBusesArea2[6]+NoBusesArea2[7]*1.5+NoBusesArea2[8]*1.5+NoBusesArea2[9]*2.3+NoBusesArea2[10]*3+NoBusesArea2[11]*3+NoBusesArea2 [12]*3+NoBusesArea2[13]*2
+NoBusesArea2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+NoBusesArea2['indicator'] <- 'Standard_Bus _Timetable'
+NoBusesArea2['EastorWest'] <- 'Westbound' 
+
+moreBuses2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(Car = if_else(HourOfDay >= 7 & HourOfDay <= 9 , Car-80,Car-40)) %>%
+  mutate(Bus = if_else(HourOfDay >= 7 & HourOfDay <= 9, Bus+4,Bus+1)) %>%
+  mutate(Car = if_else(HourOfDay <= 6 & HourOfDay >= 20 , Car+40,Car)) %>%
+  mutate(Bus = if_else(HourOfDay <= 6 & HourOfDay >= 20, Bus-1,Bus)) %>%
+  mutate(Car = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Car-70,Car)) %>%
+  mutate(Bus = if_else(HourOfDay >= 16 & HourOfDay <= 18 , Bus+4,Bus))
+moreBuses2['PCU'] <- moreBuses2[3]*0.1+moreBuses2[4]*0.4+moreBuses2[5]+moreBuses2[6]+moreBuses2[7]*1.5+moreBuses2[8]*1.5+moreBuses2[9]*2.3+moreBuses2[10]*3+moreBuses2[11]*3+moreBuses2[12]*3+moreBuses2[13]*2
+moreBuses2[,c('Cyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBuses2['indicator'] <- 'Extra_Buses'
+moreBuses2['EastorWest'] <- 'Westbound' 
+
+
+
+rbind(moreBuses,NoBusesArea, moreBuses2,NoBusesArea2) %>%  ggplot()+
+  geom_ridgeline(aes(x = HourOfDay, y = indicator, height = PCU, fill = indicator),stat = "identity",alpha = 0.5)+
+  #geom_bar(aes(x = HourOfDay , y = PCU, fill = indicator), stat = "identity",alpha = 0.2)+
+  scale_fill_brewer(palette = 'Dark2')+
+  labs(title = "Fig 17: Effect of additional Buses on the N59 Hourly Traffic", x ='Hour of Day')+
+  scale_x_continuous(lim=c(7,20), breaks=seq(7,20,1)) +
+  facet_wrap(~EastorWest,ncol = 1)+ 
+  theme_bw()+
+  theme (panel.grid.major.y =element_line(colour = "gray95", size =0.1),
+panel.grid.major.x =element_line(colour = "gray95", size =0.1),
+axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+
+
+#############-------------------plot13------------------------#################
+
+moreBikesss <- eastbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(NewCyclist = Cyclist*100) %>% mutate(diffCyclist = round(NewCyclist-Cyclist)) %>%
+  mutate(Car = Car-diffCyclist)
+moreBikesss[c('Cyclist','diffCyclist')] <- list(NULL)
+moreBikesss['PCU'] <- moreBikesss[13]*0.1+moreBikesss[4]*0.4+moreBikesss[5]+moreBikesss[6]+moreBikesss[7]*1.5+moreBikesss[8]*1.5+moreBikesss[9]*2.3+moreBikesss[10]*3+moreBikesss[11]*3+moreBikesss[12]*3
+moreBikesss[,c('NewCyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBikesss['indicator'] <- 'Extra_Bikes'
+moreBikesss['EastorWest'] <- 'Eastbound' 
+
+moreBikes2 <- westbound %>% select(HourOfDay,DayOfWeek,Cyclist,MotorCycle,Car,Van,Rigid2Axle,	Rigid3Axle,	Rigid4Axle,	AxleHGv3,	AxleHGV4 , AxleHGV5,	Bus) %>%
+  group_by(HourOfDay) %>% summarise_all(funs(if(is.numeric(.)) mean(., na.rm = TRUE) else first(.))) %>%
+  mutate(NewCyclist = Cyclist*100) %>% mutate(diffCyclist = round(NewCyclist-Cyclist)) %>%
+  mutate(Car = Car-diffCyclist)
+moreBikes2[c('Cyclist','diffCyclist')] <- list(NULL)
+moreBikes2['PCU'] <- moreBikes2[13]*0.1+moreBikes2[4]*0.4+moreBikes2[5]+moreBikes2[6]+moreBikes2[7]*1.5+moreBikes2[8]*1.5+moreBikes2[9]*2.3+moreBikes2[10]*3+moreBikes2[11]*3+moreBikes2[12]*3
+moreBikes2[,c('NewCyclist','MotorCycle','Car','Van',	'Rigid2Axle',	'Rigid3Axle',	'Rigid4Axle',	'AxleHGv3',	'AxleHGV4', 'AxleHGV5',	'Bus')] <- list(NULL)
+moreBikes2['indicator'] <- 'Extra_Bikes'
+moreBikes2['EastorWest'] <- 'Westbound' 
+
+
+
+rbind(moreBikesss,NoBusesArea,moreBikes2,NoBusesArea2) %>%  ggplot()+
+  geom_ridgeline(aes(x = HourOfDay, y = indicator, height = PCU, fill = indicator),stat = "identity",alpha = 0.5)+
+  #geom_bar(aes(x = HourOfDay , y = PCU, fill = indicator), stat = "identity",alpha = 0.2)+
+  scale_fill_brewer(palette = 'Dark2')+
+  labs(title = "Fig 18: Effect of a Greenway on the N59 Hourly Traffic", x ='Hour of Day')+
+  scale_x_continuous(lim=c(0,23), breaks=seq(0,23,1)) +
+  facet_wrap(~EastorWest,ncol = 1)+ 
+  theme_bw()+
+  theme (
+panel.grid.major.y =element_line(colour = "gray95", size =0.1),
+panel.grid.major.x =element_line(colour = "gray95", size =0.1),
+axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+
+
+```
